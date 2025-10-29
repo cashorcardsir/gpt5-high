@@ -1,20 +1,19 @@
-// cup-loader.js
+// can-loader.js
 (() => {
   'use strict';
 
   const DEFAULTS = {
-    color: '#ff7a00',          // main liquid color
-    background: 'rgba(18, 18, 20, 0.92)', // overlay bg
-    textColor: '#ffffff',      // percentage text
+    color: '#ff7a00',                 // liquid color
+    background: 'rgba(18, 18, 20, 0.92)', // overlay background
+    textColor: '#ffffff',
     showPercentage: true,
     includeBackgroundImages: true,
     zIndex: 999999,
-    minDuration: 300,          // ms, minimum visible time to avoid flash
-    waveSpeedSec: 3.5          // horizontal wave speed
+    minDuration: 300,                 // minimum time shown (ms)
+    waveSpeedSec: 3.5                 // horizontal wave speed
   };
 
   function lighten(hex, pct = 25) {
-    // Simple hex lighten (0-100)
     hex = hex.replace('#', '');
     if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
     const num = parseInt(hex, 16);
@@ -27,12 +26,12 @@
 
   const WEIGHTS = { dom: 30, fonts: 20, imgs: 50 };
 
-  const CupLoader = {
+  const CanLoader = {
     opts: { ...DEFAULTS },
     overlayEl: null,
     percentEl: null,
     fillLevelEl: null,
-    cupClipRect: null,
+    canClipRect: null,
     startTime: 0,
     domDone: false,
     fontsDone: false,
@@ -46,20 +45,20 @@
       this.injectStyles();
       this.buildDOM();
 
-      // Begin tracking
+      // Track progress
       this.trackDOMReady();
       this.trackFonts();
       this.trackImages();
 
-      // Safety: ensure we finish at window load even if something isn’t counted
+      // Safety: finish at window load if anything slips through
       window.addEventListener('load', () => this.finish());
     },
 
     injectStyles() {
       const style = document.createElement('style');
-      style.setAttribute('data-cup-loader', 'true');
+      style.setAttribute('data-can-loader', 'true');
       style.textContent = `
-        .cup-loader-overlay {
+        .can-loader-overlay {
           position: fixed;
           inset: 0;
           display: flex;
@@ -69,34 +68,34 @@
           z-index: ${this.opts.zIndex};
           transition: opacity 400ms ease;
         }
-        .cup-loader-overlay.hide {
+        .can-loader-overlay.hide {
           opacity: 0;
           pointer-events: none;
         }
-        .cup-loader {
+        .can-loader {
           text-align: center;
           color: ${this.opts.textColor};
           font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
           user-select: none;
         }
-        .cup-percent {
+        .can-percent {
           margin-top: 12px;
           font-size: 16px;
           font-weight: 600;
           letter-spacing: 0.4px;
         }
 
-        /* Wave animation on the inner group */
+        /* Horizontal wave animation */
         .wave-shift {
           transform-box: fill-box;
-          animation: cup-wave ${this.opts.waveSpeedSec}s linear infinite;
+          animation: can-wave ${this.opts.waveSpeedSec}s linear infinite;
         }
-        @keyframes cup-wave {
+        @keyframes can-wave {
           from { transform: translateX(0); }
-          to   { transform: translateX(-200px); }
+          to   { transform: translateX(-220px); }
         }
 
-        /* Smooth fill movement */
+        /* Smooth vertical fill movement */
         .fill-level {
           transform-box: fill-box;
           transition: transform 420ms cubic-bezier(.22,.61,.36,1);
@@ -113,87 +112,94 @@
 
     buildDOM() {
       const overlay = document.createElement('div');
-      overlay.className = 'cup-loader-overlay';
+      overlay.className = 'can-loader-overlay';
       overlay.setAttribute('aria-hidden', 'true');
 
-      // SVG cup with a rectangular cup body (rounded corners) and wave inside via clipPath
-      const cupColor = this.opts.color;
-      const foamColor = lighten(cupColor, 30);
+      const liquid = this.opts.color;
+      const foam = lighten(liquid, 30);
 
+      // We clip the wave to the can's inner cavity: a rounded rect just inside the rim
+      // Top of interior ~ y=58, bottom ~ y=245 (from your SVG). Width trimmed to sit inside the body.
       overlay.innerHTML = `
-        <div class="cup-loader">
-          <svg width="220" height="240" viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg" aria-label="Loading cup">
-            <!-- Cup body for clip -->
+        <div class="can-loader">
+          <svg width="200" height="300" viewBox="0 0 200 300" xmlns="http://www.w3.org/2000/svg" aria-label="Loading can">
             <defs>
-              <clipPath id="cupClip">
-                <rect id="cupClipRect" x="30" y="25" width="140" height="150" rx="22" ry="22"></rect>
+              <clipPath id="canClip">
+                <rect id="canClipRect" x="55" y="58" width="90" height="187" rx="8" ry="8"></rect>
               </clipPath>
             </defs>
 
-            <!-- Cup outline and handle (decorative) -->
-            <rect x="30" y="25" width="140" height="150" rx="22" ry="22" fill="none" stroke="#e2e2e6" stroke-width="3"/>
-            <path d="M172,60 q22,16 0,40 q-12,14 -26,0" fill="none" stroke="#e2e2e6" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- Bottom rim (behind wave) -->
+            <ellipse cx="100" cy="250" rx="50" ry="10" fill="#ccc" stroke="#999" stroke-width="2"/>
+            <ellipse cx="100" cy="245" rx="48" ry="8" fill="#ddd" stroke="none"/>
 
-            <!-- Liquid clipped to cup body -->
-            <g clip-path="url(#cupClip)">
-              <!-- Container that moves vertically according to progress -->
-              <g class="fill-level" style="transform: translateY(130px);">
-                <!-- Horizontal wave movement -->
+            <!-- Wave liquid clipped to can interior -->
+            <g clip-path="url(#canClip)">
+              <g class="fill-level" style="transform: translateY(245px);">
                 <g class="wave-shift">
-                  <!-- Main wave (wide path, closed at bottom) -->
-                  <path d="M -200 40 
-                           Q -175 20 -150 40 T -100 40 T -50 40 T 0 40 T 50 40 T 100 40 T 150 40 T 200 40 T 250 40 T 300 40 T 350 40 T 400 40
-                           L 400 220 L -200 220 Z"
-                        fill="${cupColor}" opacity="0.92"></path>
-                  <!-- Highlight foam wave slightly above -->
-                  <path d="M -200 35 
-                           Q -175 20 -150 35 T -100 35 T -50 35 T 0 35 T 50 35 T 100 35 T 150 35 T 200 35 T 250 35 T 300 35 T 350 35 T 400 35
-                           L 400 220 L -200 220 Z"
-                        fill="${foamColor}" opacity="0.65"></path>
+                  <!-- Main wave: crest at y=0, extends far downward so clipping shows only the interior -->
+                  <path d="M -220 0 
+                           Q -200 -8 -180 0 T -140 0 T -100 0 T -60 0 T -20 0 T 20 0 T 60 0 T 100 0 T 140 0 T 180 0 T 220 0 T 260 0 T 300 0
+                           L 300 500 L -220 500 Z"
+                        fill="${liquid}" opacity="0.92"></path>
+                  <!-- Foam highlight slightly above crest -->
+                  <path d="M -220 -4 
+                           Q -200 -12 -180 -4 T -140 -4 T -100 -4 T -60 -4 T -20 -4 T 20 -4 T 60 -4 T 100 -4 T 140 -4 T 180 -4 T 220 -4 T 260 -4 T 300 -4
+                           L 300 500 L -220 500 Z"
+                        fill="${foam}" opacity="0.65"></path>
                 </g>
               </g>
             </g>
+
+            <!-- Can body and top rim (above wave) -->
+            <rect x="50" y="50" width="100" height="200" rx="10" ry="10" fill="#e0e0e0" stroke="#999" stroke-width="2"/>
+            <ellipse cx="100" cy="50" rx="50" ry="10" fill="#ccc" stroke="#999" stroke-width="2"/>
+            <ellipse cx="100" cy="55" rx="48" ry="8" fill="#ddd" stroke="none"/>
+
+            <!-- Optional inner top ellipse (drawn below rim for subtle depth; left here but below wave to avoid covering it) -->
+            <!-- If you prefer the interior highlight, move this BEFORE the clipped wave group -->
+            <!-- <ellipse cx="100" cy="58" rx="45" ry="7" fill="#bbb" stroke="none"/> -->
+
+            <!-- Side highlights and seam -->
+            <path d="M52,55 L52,245 Q52,248 55,250 L95,250 Q98,250 100,248 L100,52 Q100,50 98,52 L55,52 Q52,52 52,55 Z" fill="none" stroke="#fff" stroke-width="1" opacity="0.4"/>
+            <line x1="150" y1="55" x2="150" y2="245" stroke="#aaa" stroke-width="0.5" stroke-dasharray="2,2"/>
+
+            <!-- Shadow under can -->
+            <ellipse cx="100" cy="265" rx="60" ry="8" fill="rgba(0,0,0,0.1)" />
           </svg>
-          <div class="cup-percent">${this.opts.showPercentage ? '0%' : ''}</div>
+
+          <div class="can-percent">${this.opts.showPercentage ? '0%' : ''}</div>
         </div>
       `;
 
       document.body.appendChild(overlay);
 
       this.overlayEl = overlay;
-      this.percentEl = overlay.querySelector('.cup-percent');
+      this.percentEl = overlay.querySelector('.can-percent');
       this.fillLevelEl = overlay.querySelector('.fill-level');
-      this.cupClipRect = overlay.querySelector('#cupClipRect');
+      this.canClipRect = overlay.querySelector('#canClipRect');
     },
 
-    // Progress calculation
     computeProgress() {
       const domPart   = this.domDone   ? WEIGHTS.dom   : 0;
       const fontPart  = this.fontsDone ? WEIGHTS.fonts : 0;
       const imgPart   = this.imgTotal > 0 ? WEIGHTS.imgs * (this.imgLoaded / this.imgTotal) : 0;
       let progress = domPart + fontPart + imgPart;
-
-      // Clamp to 99 until finish() or full accounted
       if (progress >= 99 && !this.finished) progress = 99;
       return Math.min(100, Math.max(0, Math.round(progress)));
     },
 
     applyProgress(pct) {
-      // Update text
       if (this.percentEl && this.opts.showPercentage) {
         this.percentEl.textContent = `${pct}%`;
       }
-      // Update fill vertical position
-      // We want the wave crest to move from near bottom to top of the cup rect.
-      const rectY = parseFloat(this.cupClipRect.getAttribute('y'));       // 25
-      const rectH = parseFloat(this.cupClipRect.getAttribute('height'));  // 150
-      const crestLocalY = 40;  // crest y in the wave path
-      // Position crest at: rectY + rectH - (pct/100)*rectH
-      // So translateY = desiredY - crestLocalY
-      const desiredY = rectY + rectH - (pct / 100) * rectH;
-      const tY = desiredY - crestLocalY; // pixels
+      // Map 0–100% to interior cavity [rectY .. rectY+rectH]
+      // Crest y in the wave path is 0, so translateY directly to desired y.
+      const rectY = parseFloat(this.canClipRect.getAttribute('y'));       // ~58
+      const rectH = parseFloat(this.canClipRect.getAttribute('height'));  // ~187
+      const desiredY = rectY + rectH - (pct / 100) * rectH;               // 0%->bottom, 100%->top
       if (this.fillLevelEl) {
-        this.fillLevelEl.style.transform = `translateY(${tY}px)`;
+        this.fillLevelEl.style.transform = `translateY(${desiredY}px)`;
       }
     },
 
@@ -205,18 +211,14 @@
     finish() {
       if (this.finished) return;
       this.finished = true;
-
-      // Force 100%
       this.applyProgress(100);
 
-      // Respect minimum display time to avoid flash
       const elapsed = performance.now() - this.startTime;
       const remaining = Math.max(0, this.opts.minDuration - elapsed);
 
       setTimeout(() => {
         this.overlayEl.classList.add('hide');
         setTimeout(() => {
-          // Remove from DOM to keep things clean
           if (this.overlayEl && this.overlayEl.parentNode) {
             this.overlayEl.parentNode.removeChild(this.overlayEl);
           }
@@ -226,12 +228,10 @@
 
     trackDOMReady() {
       if (document.readyState === 'interactive' || document.readyState === 'complete') {
-        this.domDone = true;
-        this.update();
+        this.domDone = true; this.update();
       } else {
         document.addEventListener('DOMContentLoaded', () => {
-          this.domDone = true;
-          this.update();
+          this.domDone = true; this.update();
         }, { once: true });
       }
     },
@@ -239,31 +239,25 @@
     trackFonts() {
       if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(() => {
-          this.fontsDone = true;
-          this.update();
+          this.fontsDone = true; this.update();
         }).catch(() => {
-          // If fonts fail or unsupported, continue
-          this.fontsDone = true;
-          this.update();
+          this.fontsDone = true; this.update();
         });
       } else {
-        // Not supported; consider fonts done
-        this.fontsDone = true;
-        this.update();
+        this.fontsDone = true; this.update();
       }
     },
 
     trackImages() {
-      // Gather image URLs
       const urls = new Set();
 
-      // <img> tags
+      // <img> sources
       document.querySelectorAll('img').forEach(img => {
         const src = img.currentSrc || img.src;
         if (src) urls.add(src);
       });
 
-      // CSS background images
+      // CSS background images (optional)
       if (this.opts.includeBackgroundImages) {
         const all = document.querySelectorAll('*');
         for (const el of all) {
@@ -273,9 +267,7 @@
             if (matches) {
               matches.forEach(m => {
                 const url = m.replace(/^url\((?:'|")?/, '').replace(/(?:'|")?\)$/, '');
-                if (url && !url.startsWith('data:')) {
-                  urls.add(url);
-                }
+                if (url && !url.startsWith('data:')) urls.add(url);
               });
             }
           }
@@ -288,32 +280,25 @@
       this.update();
 
       if (this.imgTotal === 0) {
-        // No images to wait for; finish at window load or soon after DOM & fonts
-        // Give a tiny moment so the wave has time to animate a bit
         setTimeout(() => this.finish(), 200);
         return;
       }
 
-      // Preload images to track their load progress
+      // Preload to track progress
       list.forEach(url => {
         const img = new Image();
         img.onload = () => {
-          this.imgLoaded++;
-          this.update();
+          this.imgLoaded++; this.update();
           if (this.imgLoaded >= this.imgTotal) this.finish();
         };
         img.onerror = () => {
-          // Count errors as loaded so progress isn't stuck
-          this.imgLoaded++;
-          this.update();
+          this.imgLoaded++; this.update();
           if (this.imgLoaded >= this.imgTotal) this.finish();
         };
-        // Avoid blocking; start loading
         img.src = url;
       });
     }
   };
 
-  // Expose global
-  window.CupLoader = CupLoader;
+  window.CanLoader = CanLoader;
 })();
